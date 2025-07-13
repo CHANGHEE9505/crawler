@@ -15,7 +15,11 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 # --- 설정 ---
 SEOUL_DISTRICTS = [
-    "강남구"
+    "강남구", "강동구", "강북구", "강서구", "관악구",
+    "광진구", "구로구", "금천구", "노원구", "도봉구",
+    "동대문구", "동작구", "마포구", "서대문구", "서초구",
+    "성동구", "성북구", "송파구", "양천구", "영등포구",
+    "용산구", "은평구", "종로구", "중구", "중랑구"
 ]
 BASE_URL = "https://map.kakao.com/"
 DESKTOP_PATH = os.path.join(os.path.expanduser("~"), "Desktop")
@@ -173,13 +177,53 @@ try:
                 )
                 driver.execute_script("arguments[0].click();", review_tab)
                 time.sleep(2)
-                html_review = driver.page_source
-                soup_review = BeautifulSoup(html_review, 'html.parser')
-                review_elements = soup_review.select('ul.list_review li')
-                for review in review_elements:
-                    comment = review.select_one('.desc_review')
-                    if comment:
-                        review_list.append(comment.text.strip())
+
+                # --- 전체 리뷰 로딩 시작 ---
+                while True:
+                    try:
+                        # 현재 로드된 리뷰의 개수를 확인합니다.
+                        review_count_before_click = len(driver.find_elements(By.CSS_SELECTOR, 'ul.list_review > li'))
+
+                        # '리뷰 목록 더보기' 버튼을 찾아 클릭합니다.
+                        load_more_button = WebDriverWait(driver, 2).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, 'span.btn_more'))
+                        )
+                        driver.execute_script("arguments[0].click();", load_more_button)
+
+                        # 새 리뷰가 로드되어 리뷰 개수가 늘어날 때까지 최대 5초간 기다립니다.
+                        WebDriverWait(driver, 5).until(
+                            lambda d: len(d.find_elements(By.CSS_SELECTOR, 'ul.list_review > li')) > review_count_before_click
+                        )
+                        # print(f"  - '리뷰 목록 더보기' 클릭 완료 (리뷰 {review_count_before_click}개 -> {len(driver.find_elements(By.CSS_SELECTOR, 'ul.list_review > li'))}개)")
+
+                    except (NoSuchElementException, TimeoutException):
+                        # 더 이상 '더보기' 버튼이 없거나, 클릭해도 리뷰가 늘어나지 않으면 로딩을 종료합니다.
+                        # print("--- 모든 리뷰를 로드했습니다. 내용 수집을 시작합니다. ---")
+                        break
+
+                # 페이지에 로드된 모든 리뷰 엘리먼트를 가져옵니다.
+                review_elements = driver.find_elements(By.CSS_SELECTOR, 'ul.list_review > li')
+                # print(f"--- 총 {len(review_elements)}개의 리뷰를 찾았습니다. ---")
+                
+                for review_element in review_elements:
+                    try:
+                        # 개별 리뷰의 '내용 더보기' 버튼을 찾아 클릭합니다.
+                        try:
+                            expand_button = review_element.find_element(By.CSS_SELECTOR, '.desc_review > a.link_more')
+                            driver.execute_script("arguments[0].click();", expand_button)
+                            time.sleep(0.3) # 내용이 펼쳐질 때까지 잠시 대기
+                        except NoSuchElementException:
+                            pass # '내용 더보기' 버튼이 없는 짧은 리뷰는 그냥 넘어갑니다.
+                        
+                        # 펼쳐진 전체 리뷰 텍스트를 가져옵니다.
+                        comment_element = review_element.find_element(By.CSS_SELECTOR, '.desc_review')
+                        full_comment = re.sub(r'\s+', ' ', comment_element.text).strip()
+                        review_list.append(full_comment)
+
+                    except Exception as e:
+                        # print(f"  - 개별 리뷰 처리 중 오류 발생: {e}")
+                        continue
+
             except (NoSuchElementException, TimeoutException):
                 pass
             all_reviews = '\n'.join(review_list) if review_list else '리뷰 없음'
