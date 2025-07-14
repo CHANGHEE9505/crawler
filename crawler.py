@@ -34,7 +34,7 @@ try:
 
     print("--- 1단계: 서울 25개구 모든 식당 링크 수집 시작 ---")
     for district in SEOUL_DISTRICTS:
-        SEARCH_KEYWORD = f"{district} 식당"
+        SEARCH_KEYWORD = f"{district} 회식"
         print(f"\n'{SEARCH_KEYWORD}' 검색 중...")
         driver.get(BASE_URL)
 
@@ -132,6 +132,14 @@ try:
             store_name = soup_detail.select_one('h3.tit_place').text.replace('장소명', '').strip() if soup_detail.select_one('h3.tit_place') else "가게명 없음"
             store_image_element = soup_detail.select_one('div.board_photo img')
             store_image_url = store_image_element['src'] if store_image_element and 'src' in store_image_element.attrs else "이미지 없음"
+
+            # --- 전화번호 딱 보이는 한 개만 가져오기 (셀레니움 사용) ---
+            try:
+                phone_element = driver.find_element(By.CSS_SELECTOR, "div.unit_default div.detail_info.info_suggest > div.row_detail > span.txt_detail")
+                store_tel = phone_element.text.strip()
+            except Exception:
+                store_tel = "전화번호 없음"
+
             operating_hours = "영업시간 없음"
             try:
                 expanded = False
@@ -271,6 +279,7 @@ try:
             data = {
                 '구': district,
                 '가게명': store_name,
+                '전화번호': store_tel,
                 '가게 이미지 URL': store_image_url,
                 '영업시간': operating_hours,
                 '전체 메뉴': full_menu,
