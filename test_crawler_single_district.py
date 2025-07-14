@@ -15,11 +15,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 # --- 설정 ---
 SEOUL_DISTRICTS = [
-    "강남구", "강동구", "강북구", "강서구", "관악구",
-    "광진구", "구로구", "금천구", "노원구", "도봉구",
-    "동대문구", "동작구", "마포구", "서대문구", "서초구",
-    "성동구", "성북구", "송파구", "양천구", "영등포구",
-    "용산구", "은평구", "종로구", "중구", "중랑구"
+    "종로구"
 ]
 BASE_URL = "https://map.kakao.com/"
 DESKTOP_PATH = os.path.join(os.path.expanduser("~"), "Desktop")
@@ -34,7 +30,7 @@ try:
 
     print("--- 1단계: 서울 25개구 모든 식당 링크 수집 시작 ---")
     for district in SEOUL_DISTRICTS:
-        SEARCH_KEYWORD = f"{district} 식당"
+        SEARCH_KEYWORD = f"{district} 회식"
         print(f"\n'{SEARCH_KEYWORD}' 검색 중...")
         driver.get(BASE_URL)
 
@@ -230,22 +226,25 @@ try:
                         # print("--- 모든 리뷰를 로드했습니다. 내용 수집을 시작합니다. ---")
                         break
 
-                # 페이지에 로드된 모든 리뷰 엘리먼트를 가져옵니다.
-                review_elements = driver.find_elements(By.CSS_SELECTOR, 'ul.list_review > li')
-                # print(f"--- 총 {len(review_elements)}개의 리뷰를 찾았습니다. ---")
-                
-                for review_element in review_elements:
+                # Get the total number of reviews after all "load more" clicks
+                num_reviews = len(driver.find_elements(By.CSS_SELECTOR, 'ul.list_review > li'))
+
+                for i in range(num_reviews):
                     try:
+                        # Re-find the specific review element in each iteration to avoid staleness
+                        # This assumes the order of reviews doesn't change after expansion
+                        current_review_element = driver.find_elements(By.CSS_SELECTOR, 'ul.list_review > li')[i]
+
                         # 개별 리뷰의 '내용 더보기' 버튼을 찾아 클릭합니다.
                         try:
-                            expand_button = review_element.find_element(By.CSS_SELECTOR, '.desc_review > a.link_more')
+                            expand_button = current_review_element.find_element(By.CSS_SELECTOR, '.desc_review > a.link_more')
                             driver.execute_script("arguments[0].click();", expand_button)
-                            time.sleep(0.3) # 내용이 펼쳐질 때까지 잠시 대기
+                            time.sleep(0.5) # Increased sleep time for DOM update
                         except NoSuchElementException:
                             pass # '내용 더보기' 버튼이 없는 짧은 리뷰는 그냥 넘어갑니다.
                         
                         # 펼쳐진 전체 리뷰 텍스트를 가져옵니다.
-                        comment_element = review_element.find_element(By.CSS_SELECTOR, '.desc_review')
+                        comment_element = current_review_element.find_element(By.CSS_SELECTOR, '.desc_review')
                         full_comment = re.sub(r'\s+', ' ', comment_element.text).strip()
                         review_list.append(full_comment)
 
@@ -268,6 +267,8 @@ try:
             address_element = soup_detail.select_one('div.unit_default h5.tit_info:-soup-contains("주소") + div.detail_info span.txt_detail')
             address = address_element.text.strip() if address_element else "주소 없음"
 
+            
+
             data = {
                 '구': district,
                 '가게명': store_name,
@@ -279,7 +280,8 @@ try:
                 '리뷰': all_reviews,
                 '위도': latitude,
                 '경도': longitude,
-                '주소': address
+                '주소': address,
+                
             }
             all_restaurants_data.append(data)
 
